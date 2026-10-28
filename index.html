@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Trichome Quiz</title>
+<title>Trichome Dankalyzer</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 #teach, #teachPanel, .tune { display: none !important; }
@@ -21,6 +21,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   background: var(--bg);
   color: var(--fg);
@@ -88,30 +89,8 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
 
 <div class="wrap">
   <div>
-    <h1>Trichome Quiz</h1>
-    <p class="sub">Help teach a trichome counter what clear, cloudy and amber heads really look like. Add a sharp macro photo, tap Quiz me, and answer a few. It counts your photo as a bonus.</p>
-    <p class="sub" id="shareStatus" style="color:var(--accent)">When you are done, tap Send my answers in the quiz box.</p>
-    <p class="sub">Privacy: your photo never leaves your device. Only a short list of numbers about each spot and your answer is shared. No picture, no name.</p>
+    <h1>Trichome Dankalyzer</h1>
   </div>
-
-  <section class="quiz" id="quiz" hidden aria-label="Quiz">
-    <div class="qhead"><strong>Is this right?</strong><button class="btn" id="qClose" type="button">Done</button></div>
-    <div class="qimgs"><canvas id="qTight" width="240" height="240"></canvas><canvas id="qWide" width="240" height="240"></canvas></div>
-    <p class="note">Left is a close up of one spot. Right is the area around it.</p>
-    <p class="qguess" id="qGuess"></p>
-    <div class="qrow" id="qAsk"><button class="btn primary" id="qYes" type="button">Yes</button><button class="btn" id="qNo" type="button">No</button></div>
-    <div class="qrow" id="qPick" hidden>
-      <button class="btn" data-pick="0" type="button">Clear</button>
-      <button class="btn" data-pick="1" type="button">Cloudy</button>
-      <button class="btn" data-pick="2" type="button">Amber</button>
-      <button class="btn" data-pick="-1" type="button">Not a trichome</button>
-      <button class="btn" data-pick="-2" type="button">Not focused enough</button>
-    </div>
-    <div class="row"><button class="btn primary" id="qSend" type="button">Send my answers</button><button class="btn" id="qCopy" type="button">Copy my answers</button></div>
-    <textarea id="qBox" rows="4" hidden readonly></textarea>
-    <p class="note" id="qCopyNote" hidden>Paste this into the forum thread. It is only numbers and your answers.</p>
-    <div class="row"><button class="btn" id="qSkip" type="button">Skip</button><button class="btn" id="qUndo" type="button">Undo</button><span class="count" id="qInfo"></span></div>
-  </section>
 
   <section class="viewer" aria-label="Photo viewer">
     <div class="stage" id="stage">
@@ -132,6 +111,26 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
       <button class="btn" id="teach" aria-pressed="false" type="button">Teach mode</button>
       <button class="btn" id="remove" type="button">Remove photo</button>
     </div>
+  </section>
+
+  <section class="quiz" id="quiz" hidden aria-label="Quiz">
+    <div class="qhead"><strong>Is this right?</strong><button class="btn" id="qClose" type="button">Done</button></div>
+    <div class="qimgs"><canvas id="qTight" width="240" height="240"></canvas><canvas id="qWide" width="240" height="240"></canvas></div>
+    <p class="note">Left is a close up of one spot. Right is the area around it.</p>
+    <p class="qguess" id="qGuess"></p>
+    <div class="qrow" id="qAsk"><button class="btn primary" id="qYes" type="button">Yes</button><button class="btn" id="qNo" type="button">No</button></div>
+    <div class="qrow" id="qPick" hidden>
+      <button class="btn" data-pick="0" type="button">Clear</button>
+      <button class="btn" data-pick="1" type="button">Cloudy</button>
+      <button class="btn" data-pick="2" type="button">Amber</button>
+      <button class="btn" data-pick="-1" type="button">Not a trichome</button>
+      <button class="btn" data-pick="-2" type="button">Not focused enough</button>
+    </div>
+    <div class="row"><button class="btn primary" id="qSend" type="button">Send my answers</button><button class="btn" id="qCopy" type="button">Copy my answers</button></div>
+    <p class="note" id="shareStatus"></p>
+    <textarea id="qBox" rows="4" hidden readonly></textarea>
+    <p class="note" id="qCopyNote" hidden>Paste this into the forum thread. It is only numbers and your answers.</p>
+    <div class="row"><button class="btn" id="qSkip" type="button">Skip</button><button class="btn" id="qUndo" type="button">Undo</button><span class="count" id="qInfo"></span></div>
   </section>
 
   <section class="teach" id="teachPanel" hidden>
@@ -709,7 +708,7 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
         vctx.stroke();
       });
     }
-    var t = p.demo ? 'Demo image, not a real bud' : (active + 1) + ' / ' + photos.length;
+    var t = p.demo ? (p.name === 'Sample' ? 'Sample photo' : 'Demo image, not a real bud') : (active + 1) + ' / ' + photos.length;
     $('tag').textContent = t;
   }
 
@@ -1025,7 +1024,20 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
   });
 
   /* ---------- demo image so the tool opens in a working state ---------- */
+  /* Shows demo.jpg from next to the page when it is there, else draws the synthetic bud. */
+  var DEMO_SRC = 'demo.jpg';
   function loadDemo() {
+    var im = new Image();
+    im.onload = function () {
+      if (photos.length && !photos[0].demo) return;
+      photos = [prep(im, 'Sample', true)];
+      active = 0;
+      rescan();
+    };
+    im.src = DEMO_SRC;
+    drawDemo();
+  }
+  function drawDemo() {
     var c = document.createElement('canvas');
     c.width = 900; c.height = 1100;
     var x = c.getContext('2d');
