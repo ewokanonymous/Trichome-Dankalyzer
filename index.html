@@ -39,6 +39,7 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
 #pane canvas { position: absolute; left: 0; top: 0; display: block; max-width: none; }
 .zoombar { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 6px; }
 .zoombar .btn { padding: 8px 14px; background: rgba(0,0,0,.7); font-size: 15px; }
+.zoombar .btn.primary { background: var(--accent); }
 .tag { position: absolute; left: 8px; top: 8px; font: 500 11px var(--mono); background: rgba(0,0,0,.65); color: var(--fg); padding: 4px 8px; border-radius: 999px; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .key { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--mute); padding: 0 4px; }
@@ -104,6 +105,7 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
       <div id="pane"><canvas id="view" width="900" height="1100"></canvas><canvas id="marks" width="900" height="1100"></canvas><canvas id="detail" hidden></canvas></div>
       <span class="tag" id="tag">Demo image</span>
       <div class="zoombar">
+        <button class="btn primary" id="zScan" type="button" hidden>Rescan the Dank</button>
         <button class="btn" id="zOut" type="button" aria-label="Zoom out">-</button>
         <button class="btn" id="zIn" type="button" aria-label="Zoom in">+</button>
         <button class="btn" id="zFit" type="button">Fit</button>
@@ -255,7 +257,7 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
   function showParams() {
     var ap = photos[active];
     if (autoSize() && ap && ap.autoSize) sliders.size.value = ap.autoSize;
-    $('sizeO').textContent = (autoSize() ? 'auto, ' : '') + sliders.size.value + ' px';
+    $('sizeO').textContent = detail && detail.p === ap ? 'zoomed in, ' + detail.d.autoSize + ' px' : (autoSize() ? 'auto, ' : '') + sliders.size.value + ' px';
     $('sensO').textContent = sliders.sens.value;
     $('cloudO').textContent = 'top ' + (100 - sliders.cloud.value) + '%';
     $('ambO').textContent = sliders.amb.value + '%';
@@ -821,9 +823,13 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
     var cx = c.getContext('2d');
     cx.imageSmoothingQuality = 'high';
     cx.drawImage(p.src, x0 * k, y0 * k, sw, sh, 0, 0, c.width, c.height);
-    var d = prep(c, p.name, false);
-    analyze(d, params());
+    var d = prep(c, p.name, false), prm = params();
+    /* Heads look bigger zoomed in, so the patch always gets its own head size, auto or not. */
+    d.autoSize = estimateSize(d) || prm.size;
+    prm.size = d.autoSize;
+    analyze(d, prm);
     detail = { p: p, d: d, x0: x0, y0: y0, x1: x1, y1: y1 };
+    $('zScan').textContent = 'Rescan the Dank';
     update();
   }
   function drawDetail() {
@@ -938,9 +944,15 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
     var p = photos[active]; if (!p) return;
     zoom.fit = Math.min(stage.clientWidth / p.w, stage.clientHeight / p.h);
     zoom.s = zoom.fit; zoom.tx = 0; zoom.ty = 0; clampZoom(); applyZoom();
+    $('zScan').hidden = true;
   }
   function limitScale(s) { return Math.max(zoom.fit, Math.min(zoom.fit * 14, s)); }
-  function redrawSoon() { clearTimeout(redrawT); redrawT = setTimeout(draw, 100); scanDetailSoon(); }
+  function redrawSoon() { clearTimeout(redrawT); redrawT = setTimeout(draw, 100); viewMoved(); }
+  /* Any zoom or pan makes an old zoom scan stale; the button offers a fresh one while zoomed in. */
+  function viewMoved() {
+    if (detail) { detail = null; update(); }
+    $('zScan').hidden = !photos[active] || zoom.s < zoom.fit * 1.6;
+  }
   function zoomAt(cx, cy, ns) {
     ns = limitScale(ns);
     var k = ns / zoom.s;
@@ -949,6 +961,10 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
   }
   $('zIn').addEventListener('click', function () { zoomAt(stage.clientWidth / 2, stage.clientHeight / 2, zoom.s * 1.7); });
   $('zOut').addEventListener('click', function () { zoomAt(stage.clientWidth / 2, stage.clientHeight / 2, zoom.s / 1.7); });
+  $('zScan').addEventListener('click', function () {
+    var b = this; b.textContent = 'Scanning...';
+    setTimeout(function () { scanDetail(); b.textContent = 'Rescan the Dank'; }, 30);
+  });
   $('zFit').addEventListener('click', function () { fitView(); redrawSoon(); });
   stage.addEventListener('wheel', function (e) {
     e.preventDefault();
