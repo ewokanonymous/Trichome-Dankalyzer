@@ -3,7 +3,7 @@
 <title>Trichome Dankalyzer</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-#teach, #teachPanel, .tune { display: none !important; }
+#teach, #teachPanel, #reset { display: none !important; }
 /* Layout: single phone-first column. Photo viewer on top, ripeness bar, then tuning sliders. Dark only, by design. */
 :root {
   --bg: #0c100d;
@@ -65,6 +65,8 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
 .ctl { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; font-size: 13px; }
 .ctl output { font: 500 12px var(--mono); color: var(--accent); }
 .ctl input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+.ctl .auto { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; color: var(--fg); }
+.ctl .auto input { accent-color: var(--accent); width: 18px; height: 18px; margin: 0; }
 .ctl p { grid-column: 1 / -1; margin: 0; color: var(--mute); font-size: 12px; line-height: 1.4; }
 .adv summary { cursor: pointer; font-size: 13px; color: var(--mute); padding: 6px 0; }
 .advbody { display: flex; flex-direction: column; gap: 14px; padding-top: 8px; }
@@ -90,7 +92,7 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
 <div class="wrap">
   <div>
     <h1>Trichome Dankalyzer</h1>
-    <p class="sub">Your photo never leaves your device. Only a few numbers about each spot and your answer get shared. No picture, no name.</p>
+    <p class="sub">Chill, your pics stay on your phone. Only a few numbers about each spot and your answer get shared. No picture, no name.</p>
   </div>
 
   <section class="viewer" aria-label="Photo viewer">
@@ -174,49 +176,50 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
   </section>
 
   <section class="tune">
-    <h2>How picky?</h2>
-    <p class="note" style="margin:0">Getting junk or blurry spots counted? Go stricter. Missing real heads? Go looser.</p>
+    <h2>How picky we feelin?</h2>
+    <p class="note" style="margin:0">Counting junk or blurry stuff? Tighten it up. Missing real heads? Loosen up a little.</p>
     <div class="brush" id="presets" style="grid-template-columns:repeat(3,1fr)">
-      <button class="btn" type="button" data-preset="loose" aria-pressed="false">Looser</button>
-      <button class="btn" type="button" data-preset="balanced" aria-pressed="true">Balanced</button>
-      <button class="btn" type="button" data-preset="strict" aria-pressed="false">Stricter</button>
+      <button class="btn" type="button" data-preset="loose" aria-pressed="false">Loose</button>
+      <button class="btn" type="button" data-preset="balanced" aria-pressed="true">Just right</button>
+      <button class="btn" type="button" data-preset="strict" aria-pressed="false">Tight</button>
     </div>
-    <details class="adv">
-      <summary>Fine tuning (optional)</summary>
+    <details class="adv" open>
+      <summary>Knobs to play with</summary>
       <div class="advbody">
     <div class="ctl">
       <label for="size">Head size</label><output id="sizeO"></output>
       <input type="range" id="size" min="2" max="14" step="1" value="4">
-      <p>Rough radius of one trichome head in pixels. Match it to the markers on your photo.</p>
+      <label class="auto"><input type="checkbox" id="autoSize" checked>Let it figure it out</label>
+      <p>How big a head is, in pixels across from the middle to the edge. On auto it sizes up the heads in each pic for you. Slide it yourself if you wanna drive.</p>
     </div>
     <div class="ctl">
       <label for="sens">Sensitivity</label><output id="sensO"></output>
       <input type="range" id="sens" min="8" max="150" step="1" value="100">
-      <p>Higher finds more heads, including faint and blurry ones. The quiz teaches it which ones are real.</p>
+      <p>Crank it and it finds more heads, faint and blurry ones too. The quiz helps sort out which ones are legit.</p>
     </div>
     <div class="ctl">
       <label for="pick">Pickiness</label><output id="pickO"></output>
       <input type="range" id="pick" min="0" max="100" step="1" value="50">
-      <p>Throws out flat, washed-out spots that do not stand out from the background around them. Raise it if it is still counting junk, lower it if it starts missing real heads. Set from your 220 quiz answers: at 50 it keeps every head you said yes to and drops about 4 in 5 of the not-a-trichome ones.</p>
+      <p>Tosses flat, washed out spots that blend into the background. Bump it up if junk is sneaking in, ease off if real heads go missing. Dialed in from 220 quiz answers: at 50 it kept every real head and tossed about 4 in 5 of the fakes.</p>
     </div>
     <div class="ctl">
       <label for="focus">Focus check</label><output id="focusO"></output>
       <input type="range" id="focus" min="0" max="100" step="1" value="40">
-      <p>Measures how sharp each patch of the photo is, then drops spots sitting in the blurry zones. Raise it to keep only the sharpest area, lower it to count more of the photo.</p>
+      <p>Checks how sharp each part of the pic is and skips the hazy zones. Higher keeps just the crispest bits, lower counts more of the shot.</p>
     </div>
     <div class="ctl">
       <label for="cloud">Cloudy cutoff</label><output id="cloudO"></output>
       <input type="range" id="cloud" min="50" max="99" step="1" value="62">
-      <p>Starting guess. Heads brighter than this share of the photo count as cloudy, judged against that photo's own lighting. Once the quiz has enough lessons, your answers take over.</p>
+      <p>Where clear turns cloudy. Heads brighter than this slice of the pic count as cloudy, judged by that pic's own lighting. Once the quiz knows enough, your answers call the shots.</p>
     </div>
     <div class="ctl">
       <label for="amb">Amber strictness</label><output id="ambO"></output>
       <input type="range" id="amb" min="20" max="80" step="1" value="30">
-      <p>Starting guess for amber heads. Once the quiz has enough lessons, your answers take over.</p>
+      <p>How orange a head has to be to count as amber. Once the quiz knows enough, your answers call the shots.</p>
     </div>
       </div>
     </details>
-    <p class="note">Colour and brightness read, so treat it as a solid second opinion next to a loupe. Best results come from sharp macro shots of sugar leaves, even white light, no flash glare. Orange pistil hairs can sneak in as amber on buds.</p>
+    <p class="note">It reads colour and brightness, so think of it as a solid second opinion next to your loupe. Works best with sharp macro shots of sugar leaves, even white light, no flash glare. Heads up, orange pistil hairs can sneak in as amber.</p>
   </section>
 </div>
 
@@ -245,7 +248,9 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
     };
   }
   function showParams() {
-    $('sizeO').textContent = sliders.size.value + ' px';
+    var ap = photos[active];
+    if (autoSize() && ap && ap.autoSize) sliders.size.value = ap.autoSize;
+    $('sizeO').textContent = (autoSize() ? 'auto, ' : '') + sliders.size.value + ' px';
     $('sensO').textContent = sliders.sens.value;
     $('cloudO').textContent = 'top ' + (100 - sliders.cloud.value) + '%';
     $('ambO').textContent = sliders.amb.value + '%';
@@ -501,8 +506,64 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
     if (nr !== null) { b.cls = nr; b.conf = 0.9; }
   }
 
+  /* ---------- head size guess ---------- */
+  /* Scale-normalised difference of Gaussians at a ladder of blur sizes. Each strong bright spot
+     answers at the blur that matches its radius; the median of those answers is the head size. */
+  function estimateSize(p) {
+    var w = p.w, h = p.h, n = w * h, i, j, x, y;
+    /* Rung 0 is the unblurred photo (about half a pixel of blur), so heads down to 2 px still register. */
+    var sig = [0.5];
+    for (var rb = 1; rb <= 11; rb++) sig.push(Math.sqrt(rb * (rb + 1)));
+    function bl(jj) { return jj ? blurG(p.lum, w, h, sig[jj]) : p.lum; }
+    var L = sig.length - 1;
+    function layer(a, b, jj) {
+      var d = new Float32Array(n), norm = 1 / (sig[jj + 1] / sig[jj] - 1);
+      for (i = 0; i < n; i++) d[i] = (a[i] - b[i]) * norm;
+      return d;
+    }
+    /* Seeds: local maxima of a small-scale layer, strongest 400. */
+    var prev = bl(0), cur = bl(1), s0 = layer(bl(1), bl(2), 1), seeds = [], m = 16;
+    for (y = m; y < h - m; y++) {
+      for (x = m; x < w - m; x++) {
+        var k = y * w + x, v = s0[k];
+        if (v < 4) continue;
+        var ok = true;
+        for (var dy = -3; dy <= 3 && ok; dy++) for (var dx = -3; dx <= 3; dx++) { if ((dx || dy) && s0[k + dy * w + dx] > v) { ok = false; break; } }
+        if (ok) seeds.push([k, v]);
+      }
+    }
+    s0 = null;
+    seeds.sort(function (a, b) { return b[1] - a[1]; });
+    seeds.length = Math.min(seeds.length, 400);
+    if (seeds.length < 10) return 0;
+    /* Walk up the blur ladder two images at a time; each seed keeps the layer with its strongest nearby response. */
+    var best = seeds.map(function () { return -1e9; }), bj = seeds.map(function () { return 0; });
+    for (j = 0; j < L; j++) {
+      if (j > 0) { prev = cur; cur = bl(j + 1); }
+      var lay = layer(prev, cur, j), rr = Math.min(6, Math.ceil(sig[j]));
+      seeds.forEach(function (sd, si) {
+        var sx = sd[0] % w, sy = (sd[0] / w) | 0, top = -1e9;
+        for (var yy = Math.max(0, sy - rr); yy <= Math.min(h - 1, sy + rr); yy++)
+          for (var xx = Math.max(0, sx - rr); xx <= Math.min(w - 1, sx + rr); xx++) if (lay[yy * w + xx] > top) top = lay[yy * w + xx];
+        if (top > best[si]) { best[si] = top; bj[si] = j; }
+      });
+    }
+    var radii = bj.map(function (jj) { return Math.sqrt(sig[jj] * sig[jj + 1]) * Math.SQRT2; }).sort(function (a, b) { return a - b; });
+    return Math.max(2, Math.min(14, Math.round(radii[radii.length >> 1])));
+  }
+  function autoSize() { return $('autoSize').checked; }
+  /* Settings with the head size swapped for this photo's own measured size when auto is on. */
+  function sizedFor(p, prm) {
+    if (!autoSize()) return prm;
+    if (!p.autoSize) p.autoSize = estimateSize(p) || DEFAULTS.size;
+    var o = {}; Object.keys(prm).forEach(function (k) { o[k] = prm[k]; });
+    o.size = p.autoSize;
+    return o;
+  }
+
   /* ---------- scanning a photo ---------- */
   function analyze(p, prm) {
+    prm = sizedFor(p, prm);
     var w = p.w, h = p.h;
     if (!p.rc || p.rc.size !== prm.size) p.rc = computeResp(p, prm.size);
     var rsp = p.rc.resp, dog = p.rc.dog;
@@ -564,6 +625,7 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
     });
   }
   function classifyAll(p, prm) {
+    prm = sizedFor(p, prm);
     var useModel = modelReady();
     p.blobs.forEach(function (b) { b.edited = false; classify(b, prm, useModel); });
     applyEdits(p, prm);
@@ -724,6 +786,7 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
   }
 
   function update() {
+    showParams();
     var tot = [0, 0, 0];
     photos.forEach(function (p) { for (var i = 0; i < 3; i++) tot[i] += (p.counts || [0, 0, 0])[i]; });
     var all = tot[0] + tot[1] + tot[2];
@@ -754,7 +817,7 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
       var s = Math.max(56 / p.w, 56 / p.h);
       c.getContext('2d').drawImage(p.canvas, (56 - p.w * s) / 2, (56 - p.h * s) / 2, p.w * s, p.h * s);
       b.appendChild(c);
-      b.addEventListener('click', function () { active = i; draw(); renderThumbs(); });
+      b.addEventListener('click', function () { active = i; draw(); renderThumbs(); showParams(); });
       box.appendChild(b);
     });
   }
@@ -775,6 +838,8 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
     var bs = document.querySelectorAll('[data-preset]');
     for (var i = 0; i < bs.length; i++) bs[i].setAttribute('aria-pressed', bs[i].getAttribute('data-preset') === cur ? 'true' : 'false');
   }
+  sliders.size.addEventListener('input', function () { $('autoSize').checked = false; });
+  $('autoSize').addEventListener('change', function () { showParams(); saveSettings(); rescan(); });
   Object.keys(sliders).forEach(function (k) {
     sliders[k].addEventListener('input', function () { showParams(); markPresets(); saveSettings(); rescanSoon(); });
   });
@@ -924,13 +989,14 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
   var DEFAULTS = { size: 4, sens: 100, cloud: 62, amb: 30, pick: 50, focus: 40 };
   function saveSettings() {
     try {
-      localStorage.setItem(KEY, JSON.stringify({ size: +sliders.size.value, sens: +sliders.sens.value, cloud: +sliders.cloud.value, amb: +sliders.amb.value, pick: +sliders.pick.value, focus: +sliders.focus.value }));
+      localStorage.setItem(KEY, JSON.stringify({ size: +sliders.size.value, sens: +sliders.sens.value, cloud: +sliders.cloud.value, amb: +sliders.amb.value, pick: +sliders.pick.value, focus: +sliders.focus.value, auto: autoSize() }));
     } catch (e) {}
   }
   function loadSaved() {
     try {
       var s = JSON.parse(localStorage.getItem(KEY) || 'null');
       if (s) Object.keys(DEFAULTS).forEach(function (k) { if (typeof s[k] === 'number') sliders[k].value = s[k]; });
+      if (s && typeof s.auto === 'boolean') $('autoSize').checked = s.auto;
     } catch (e) {}
   }
 
