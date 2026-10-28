@@ -3,7 +3,7 @@
 <title>Trichome Dankalyzer</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-#teach, #teachPanel, #reset { display: none !important; }
+#teachPanel .row.tools, #lBox { display: none !important; }
 /* Layout: single phone-first column. Photo viewer on top, ripeness bar, then tuning sliders. Dark only, by design. */
 :root {
   --bg: #0c100d;
@@ -118,7 +118,7 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
       <label class="btn" for="file">Add photos</label>
       <button class="btn" id="toggle" aria-pressed="true" type="button">Markers on</button>
       <button class="btn primary" id="quizBtn" type="button">Quiz me</button>
-      <button class="btn" id="teach" aria-pressed="false" type="button">Teach mode</button>
+      <button class="btn" id="teach" aria-pressed="false" type="button">Tag 'em</button>
       <button class="btn" id="remove" type="button">Remove photo</button>
     </div>
   </section>
@@ -144,26 +144,27 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
   </section>
 
   <section class="teach" id="teachPanel" hidden>
-    <p class="note">Pick a brush, then tap a marker to set its type. Tap an empty spot to add a head it missed. Ignore drops a false hit like a pistil hair. Tap a few correct ones too so it learns what right looks like.</p>
+    <p class="note">Pick a colour, then tap a head on the pic to tag it. Tap a ring that's wrong to fix it, or tap a head it missed to add it. Ignore is for stuff that isn't a head, like a pistil hair. Zoom in and hit Rescan the Dank to tag the little ones. Tag a few it got right too, that helps just as much.</p>
     <div class="brush" id="brushes">
       <button class="btn" type="button" data-brush="0" aria-pressed="true"><i class="dot" style="background:var(--clear)"></i>Clear</button>
       <button class="btn" type="button" data-brush="1" aria-pressed="false"><i class="dot" style="background:var(--cloudy)"></i>Cloudy</button>
       <button class="btn" type="button" data-brush="2" aria-pressed="false"><i class="dot" style="background:var(--amber)"></i>Amber</button>
       <button class="btn" type="button" data-brush="-1" aria-pressed="false"><i class="dot" style="background:#7a8580"></i>Ignore</button>
     </div>
-    <div class="row">
+    <div class="row tools">
       <button class="btn primary" id="learn" type="button">Retrain</button>
       <button class="btn" id="clearTaps" type="button">Clear taps</button>
       <button class="btn" id="forget" type="button">Forget lessons</button>
       <button class="btn" id="reset" type="button">Reset settings</button>
     </div>
-    <div class="row">
+    <div class="row tools">
       <button class="btn primary" id="lSend" type="button">Send to Claude</button>
       <button class="btn" id="lExport" type="button">Copy lessons</button>
       <button class="btn" id="lImport" type="button">Load lessons</button>
     </div>
     <textarea id="lBox" rows="4" hidden placeholder="Paste lessons text here, then press Load lessons"></textarea>
-    <p class="note" id="teachStatus">0 taps so far.</p>
+    <div class="row"><button class="btn primary" id="tSend" type="button">Submit the Dank</button></div>
+    <p class="note" id="teachStatus">Tap a head to start.</p>
   </section>
 
   <section class="readout" aria-live="polite">
@@ -841,10 +842,13 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
     x.drawImage(d.canvas, 0, 0);
     if (showMarks) {
       x.lineWidth = Math.max(0.5, 2 / sc);
+      var lw = x.lineWidth;
       d.blobs.forEach(function (b) {
-        if (b.cls < 0) return;
-        x.strokeStyle = COLORS[b.cls];
-        x.beginPath(); x.arc(b.x, b.y, Math.max(b.r * 1.5, 4), 0, Math.PI * 2); x.stroke();
+        if (b.cls < 0 && !teaching) return;
+        x.strokeStyle = b.cls < 0 ? '#7a8580' : COLORS[b.cls];
+        x.beginPath(); x.arc(b.x, b.y, Math.max(b.r * 1.5, 4), 0, Math.PI * 2);
+        if (b.edited) { x.moveTo(b.x + lw * 1.4, b.y); x.arc(b.x, b.y, lw * 1.4, 0, Math.PI * 2); }
+        x.stroke();
       });
     }
     dcan.hidden = false;
@@ -1089,8 +1093,12 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
 
   /* ---------- teach mode controls ---------- */
   var teaching = false, brush = 0;
+  function tagInfo() {
+    var n = lessons.filter(function (l) { return !l.s; }).length;
+    return n + (n === 1 ? ' answer' : ' answers') + ' ready to submit.';
+  }
   function teachStatus(msg) {
-    $('teachStatus').textContent = (msg ? msg + ' ' : '') + tapTotal() + ' taps so far.';
+    $('teachStatus').textContent = msg || tagInfo();
   }
   $('teach').addEventListener('click', function () {
     teaching = !teaching;
@@ -1108,7 +1116,10 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
   stage.addEventListener('click', function (ev) {
     if (!teaching || (ev.target.closest && ev.target.closest('.zoombar'))) return;
     var p = photos[active]; if (!p) return;
-    var rect = view.getBoundingClientRect(), sx = view.width / rect.width;
+    /* Zoomed and rescanned: tag on the sharper patch, whose spots make better lessons. */
+    var zoomed = detail && detail.p === p, cv = zoomed ? dcan : view;
+    if (zoomed) p = detail.d;
+    var rect = cv.getBoundingClientRect(), sx = cv.width / rect.width;
     var x = (ev.clientX - rect.left) * sx, y = (ev.clientY - rect.top) * sx;
     var hit = null, bd = 22 * sx;
     p.blobs.forEach(function (b) {
@@ -1120,14 +1131,14 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
     if (hit) { hit.cls = brush; hit.edited = true; px = hit.x; py = hit.y; addLesson(hit.f, brush); }
     else {
       if (brush < 0) return;
-      var nb = makeCandidate(p, x, y, params().size, 1);
+      var nb = makeCandidate(p, x, y, zoomed ? p.autoSize : sizedFor(p, params()).size, 1);
       nb.cls = brush; nb.edited = true; p.blobs.push(nb); addLesson(nb.f, brush);
       px = nb.x; py = nb.y;
     }
     var found = false;
     p.edits.forEach(function (e) { if (Math.hypot(e.x - px, e.y - py) < 3) { e.cls = brush; found = true; } });
     if (!found) p.edits.push({ x: px, y: py, cls: brush });
-    refreshAll(); teachStatus('');
+    refreshAll(); teachStatus(tagInfo());
   });
   $('learn').addEventListener('click', function () { refreshAll(); teachStatus(lessonInfo() + '.'); });
   $('forget').addEventListener('click', function () { lessons = []; saveLessons(); refreshAll(); teachStatus('Lessons forgotten.'); });
@@ -1245,7 +1256,8 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
       return [l.c].concat(l.f.map(function (x) { return Math.round(x * 1000) / 1000; }));
     });
   }
-  function shareStatus(t) { var el = $('shareStatus'); if (el) el.textContent = t; }
+  function shareStatus(t) { var el = $('shareStatus'); if (el) el.textContent = t; $('teachStatus').textContent = t; }
+  $('tSend').addEventListener('click', function () { $('qSend').click(); });
   function copyFallback(rows) {
     var text = 'TRICHOME-QUIZ ' + JSON.stringify(rows);
     var box = $('qBox'); box.hidden = false; box.value = text; box.select();
