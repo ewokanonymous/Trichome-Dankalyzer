@@ -431,7 +431,8 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
     b.f[0] = b.rv;
   }
   function rankPhoto(p) {
-    p.vsorted = p.cands.map(function (b) { return b.v; }).sort(function (a, b) { return a - b; });
+    /* A zoomed patch ranks against its whole photo, so its lessons line up with whole-photo ones. */
+    p.vsorted = p.rankRef && p.rankRef.vsorted ? p.rankRef.vsorted : p.cands.map(function (b) { return b.v; }).sort(function (a, b) { return a - b; });
     p.cands.forEach(function (b) { setRank(p, b); });
   }
 
@@ -465,9 +466,15 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
       try { localStorage.setItem('trichome-starter-v1', '1'); } catch (e) {}
     }
   }
+  function findLesson(f) {
+    var key = f.join(',');
+    for (var i = 0; i < lessons.length; i++) if (lessons[i].f === f || lessons[i].f.join(',') === key) return lessons[i];
+    return null;
+  }
   function addLesson(f, c) {
     if (!f) return;
-    for (var i = 0; i < lessons.length; i++) if (lessons[i].f === f) { lessons[i].c = c; saveLessons(); return lessons[i]; }
+    var old = findLesson(f);
+    if (old) { old.c = c; saveLessons(); return old; }
     var l = { f: f.slice(), c: c };
     lessons.push(l);
     if (lessons.length > 800) lessons.shift();
@@ -758,17 +765,19 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
   function answer(c) {
     var it = quiz.cur; if (!it) return;
     var p = it.p, b = it.b;
+    var had = findLesson(b.f), prevC = had ? had.c : null;
     var lesson = addLesson(b.f, c);
     if (!p.edits) p.edits = [];
-    var ed = { x: b.x, y: b.y, cls: c };
+    var ed = { x: b.x, y: b.y, cls: c, lesson: lesson };
     p.edits.push(ed);
-    quiz.hist.push({ p: p, ed: ed, lesson: lesson, b: b });
+    quiz.hist.push({ p: p, ed: ed, lesson: lesson, b: b, prevC: prevC });
     refreshAll();
     showQuestion();
   }
   function undoAnswer() {
     var h = quiz.hist.pop(); if (!h) return;
-    var li = lessons.indexOf(h.lesson); if (li >= 0) lessons.splice(li, 1);
+    if (h.prevC !== null) h.lesson.c = h.prevC;
+    else { var li = lessons.indexOf(h.lesson); if (li >= 0) lessons.splice(li, 1); }
     saveLessons();
     var ei = h.p.edits.indexOf(h.ed); if (ei >= 0) h.p.edits.splice(ei, 1);
     quiz.shown.splice(-2, 2);
@@ -815,7 +824,7 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
     var W = stage.clientWidth, H = stage.clientHeight;
     var x0 = Math.max(0, -zoom.tx / zoom.s), y0 = Math.max(0, -zoom.ty / zoom.s);
     var x1 = Math.min(p.w, (W - zoom.tx) / zoom.s), y1 = Math.min(p.h, (H - zoom.ty) / zoom.s);
-    if (x1 - x0 < 8 || y1 - y0 < 8) return;
+    if (!(x1 - x0 >= 8 && y1 - y0 >= 8)) return;
     /* Source pixels per scanned pixel, then blow the patch up to 1400 px (at most 4x) so small heads get room. */
     var k = p.src.width / p.w, sw = (x1 - x0) * k, sh = (y1 - y0) * k;
     var up = Math.min(4, MAXW / Math.max(sw, sh));
@@ -825,9 +834,13 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
     cx.imageSmoothingQuality = 'high';
     cx.drawImage(p.src, x0 * k, y0 * k, sw, sh, 0, 0, c.width, c.height);
     var d = prep(c, p.name, false), prm = params();
+    d.rankRef = p;
     /* Heads look bigger zoomed in, so the patch always gets its own head size, auto or not. */
     d.autoSize = estimateSize(d) || prm.size;
     prm.size = d.autoSize;
+    var sc = d.w / (x1 - x0);
+    d.edits = (p.zedits || []).filter(function (e) { return e.x >= x0 && e.x < x1 && e.y >= y0 && e.y < y1; })
+      .map(function (e) { return { x: (e.x - x0) * sc, y: (e.y - y0) * sc, cls: e.cls, lesson: e.lesson, src: e }; });
     analyze(d, prm);
     detail = { p: p, d: d, x0: x0, y0: y0, x1: x1, y1: y1 };
     $('zScan').textContent = 'Rescan the Dank';
@@ -978,7 +991,7 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
   window.addEventListener('resize', function () {
     var p = photos[active]; if (!p) return;
     zoom.fit = Math.min(stage.clientWidth / p.w, stage.clientHeight / p.h);
-    zoom.s = limitScale(zoom.s); clampZoom(); applyZoom();
+    zoom.s = limitScale(zoom.s); clampZoom(); applyZoom(); viewMoved();
   });
 
   var ptrs = {}, gest = null;
@@ -1093,6 +1106,24 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
 
   /* ---------- teach mode controls ---------- */
   var teaching = false, brush = 0;
+  /* Point an edit's answer at the new call; if its lesson was dropped (Forget, the 800 cap), start a fresh one. */
+  function setLesson(l, f, c) {
+    if (l && lessons.indexOf(l) >= 0) { l.c = c; return l; }
+    return addLesson(f, c);
+  }
+  /* The same head tagged whole-photo and zoomed keeps one call. A zoom tag also lands on the whole photo so its counts include it. */
+  /* The closest edit within reach, or null. Reach stays under a head's width so a neighbour is never mistaken for it. */
+  function nearestEdit(list, x, y, reach) {
+    var best = null, bd = reach;
+    (list || []).forEach(function (e) { var dd = Math.hypot(e.x - x, e.y - y); if (dd < bd) { bd = dd; best = e; } });
+    return best;
+  }
+  function syncViews(ph, at, fromZoom, c) {
+    var reach = Math.max(3, sizedFor(ph, params()).size * 0.75);
+    var other = nearestEdit((fromZoom ? ph.edits : ph.zedits || []).filter(function (e) { return e !== at; }), at.x, at.y, reach);
+    if (other) { other.cls = c; if (other.lesson && lessons.indexOf(other.lesson) >= 0) other.lesson.c = c; }
+    else if (fromZoom) (ph.edits = ph.edits || []).push({ x: at.x, y: at.y, cls: c });
+  }
   function tagInfo() {
     var n = lessons.filter(function (l) { return !l.s; }).length;
     return n + (n === 1 ? ' answer' : ' answers') + ' ready to submit.';
@@ -1127,23 +1158,36 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
       if (dd < bd) { bd = dd; hit = b; }
     });
     if (!p.edits) p.edits = [];
-    var px, py;
-    if (hit) { hit.cls = brush; hit.edited = true; px = hit.x; py = hit.y; addLesson(hit.f, brush); }
+    var px, py, f;
+    if (hit) { px = hit.x; py = hit.y; f = hit.f; }
     else {
       if (brush < 0) return;
       var nb = makeCandidate(p, x, y, zoomed ? p.autoSize : sizedFor(p, params()).size, 1);
-      nb.cls = brush; nb.edited = true; p.blobs.push(nb); addLesson(nb.f, brush);
-      px = nb.x; py = nb.y;
+      p.blobs.push(nb); px = nb.x; py = nb.y; f = nb.f;
     }
-    var found = false;
-    p.edits.forEach(function (e) { if (Math.hypot(e.x - px, e.y - py) < 3) { e.cls = brush; found = true; } });
-    if (!found) p.edits.push({ x: px, y: py, cls: brush });
+    /* Re-tagging a spot changes its answer instead of adding a second one. Rescans shift spots a little, hence the size-based reach. */
+    var ed = nearestEdit(p.edits, px, py, Math.max(3, (zoomed ? p.autoSize : sizedFor(p, params()).size) * 0.75));
+    if (ed) {
+      ed.cls = brush;
+      ed.lesson = setLesson(ed.lesson, f, brush);
+      if (ed.src) { ed.src.cls = brush; ed.src.lesson = ed.lesson; }
+    } else {
+      ed = { x: px, y: py, cls: brush, lesson: addLesson(f, brush) };
+      p.edits.push(ed);
+      if (zoomed) {
+        var ph = detail.p, k = (detail.x1 - detail.x0) / p.w;
+        ed.src = { x: detail.x0 + px * k, y: detail.y0 + py * k, cls: brush, lesson: ed.lesson };
+        (ph.zedits = ph.zedits || []).push(ed.src);
+      }
+    }
+    syncViews(zoomed ? detail.p : p, zoomed ? ed.src : ed, zoomed, brush);
+    saveLessons();
     refreshAll(); teachStatus(tagInfo());
   });
   $('learn').addEventListener('click', function () { refreshAll(); teachStatus(lessonInfo() + '.'); });
   $('forget').addEventListener('click', function () { lessons = []; saveLessons(); refreshAll(); teachStatus('Lessons forgotten.'); });
   $('clearTaps').addEventListener('click', function () {
-    photos.forEach(function (p) { p.edits = []; });
+    photos.forEach(function (p) { p.edits = []; p.zedits = []; });
     rescan(); teachStatus('Taps cleared.');
   });
   $('reset').addEventListener('click', function () {
