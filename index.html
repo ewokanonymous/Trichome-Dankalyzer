@@ -41,6 +41,9 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
 .zoombar .btn { padding: 8px 14px; background: rgba(0,0,0,.7); font-size: 15px; }
 .tag { position: absolute; left: 8px; top: 8px; font: 500 11px var(--mono); background: rgba(0,0,0,.65); color: var(--fg); padding: 4px 8px; border-radius: 999px; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.key { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--mute); padding: 0 4px; }
+.key span { display: flex; align-items: center; gap: 6px; }
+.key i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid; display: inline-block; }
 .thumbs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
 .thumb { flex: none; width: 56px; height: 56px; border-radius: 10px; border: 2px solid transparent; padding: 0; background: #000; overflow: hidden; cursor: pointer; }
 .thumb canvas { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -105,6 +108,7 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
         <button class="btn" id="zFit" type="button">Fit</button>
       </div>
     </div>
+    <div class="key" aria-label="Marker colours"><span><i style="border-color:var(--clear)"></i>Clear</span><span><i style="border-color:var(--cloudy)"></i>Cloudy</span><span><i style="border-color:var(--amber)"></i>Amber</span></div>
     <div class="thumbs" id="thumbs"></div>
     <div class="row">
       <input class="file" type="file" id="file" accept="image/*" multiple>
