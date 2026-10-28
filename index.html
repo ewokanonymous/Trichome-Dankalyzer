@@ -100,7 +100,7 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
 
   <section class="viewer" aria-label="Photo viewer">
     <div class="stage" id="stage">
-      <div id="pane"><canvas id="view" width="900" height="1100"></canvas><canvas id="marks" width="900" height="1100"></canvas></div>
+      <div id="pane"><canvas id="view" width="900" height="1100"></canvas><canvas id="marks" width="900" height="1100"></canvas><canvas id="detail" hidden></canvas></div>
       <span class="tag" id="tag">Demo image</span>
       <div class="zoombar">
         <button class="btn" id="zOut" type="button" aria-label="Zoom out">-</button>
@@ -133,10 +133,10 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
       <button class="btn" data-pick="-1" type="button">Not a trichome</button>
       <button class="btn" data-pick="-2" type="button">Not focused enough</button>
     </div>
-    <div class="row"><button class="btn primary" id="qSend" type="button">Send my answers</button><button class="btn" id="qCopy" type="button">Copy my answers</button></div>
+    <div class="row"><button class="btn primary" id="qSend" type="button">Submit the Dank</button></div>
     <p class="note" id="shareStatus"></p>
     <textarea id="qBox" rows="4" hidden readonly></textarea>
-    <p class="note" id="qCopyNote" hidden>Paste this into the forum thread. It is only numbers and your answers.</p>
+    <p class="note" id="qCopyNote" hidden></p>
     <div class="row"><button class="btn" id="qSkip" type="button">Skip</button><button class="btn" id="qUndo" type="button">Undo</button><span class="count" id="qInfo"></span></div>
   </section>
 
@@ -286,7 +286,7 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
         integ[(y + 1) * W1 + xx + 1] = integ[y * W1 + xx + 1] + run;
       }
     }
-    return { name: name, demo: !!demo, canvas: c, w: w, h: h, data: d, lum: lum, integ: integ, blobs: [] };
+    return { name: name, demo: !!demo, src: source, canvas: c, w: w, h: h, data: d, lum: lum, integ: integ, blobs: [] };
   }
 
   /* ---------- detection: local blob finder plus feature patches ---------- */
@@ -338,7 +338,7 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
     for (i = 0; i < n; i++) { dog[i] = g1[i] - g2[i]; var d = lum[i] - g2[i]; sq[i] = d * d; }
     var vr = blurG(sq, w, h, size * 6);
     for (i = 0; i < n; i++) resp[i] = dog[i] / (Math.sqrt(vr[i]) + 4);
-    return { size: size, dog: dog, resp: resp };
+    return { size: size, dog: dog, resp: resp, g1: g1 };
   }
 
   function bil(a, w, h, x, y) {
@@ -387,14 +387,32 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
     return { r: sr / n, g: sg / n, b: sb / n, l: sl / n, mx: mx };
   }
   /* A candidate is a small square patch around one bright spot, summed up as 8 numbers. */
+  /* How stretched the spot is: ratio of the two curvatures of the lightly blurred photo at the spot.
+     A round head bends about the same both ways (near 1); a hair or leaf edge bends hard across and barely along. */
+  function elongAt(p, x, y, size) {
+    var g = p.rc && p.rc.size === size ? p.rc.g1 : null;
+    if (!g) return 1;
+    var w = p.w, s = Math.max(1, Math.round(size * 0.6));
+    if (x < s || y < s || x >= w - s || y >= p.h - s) return 1;
+    var i = y * w + x;
+    var dxx = g[i + s] + g[i - s] - 2 * g[i];
+    var dyy = g[i + s * w] + g[i - s * w] - 2 * g[i];
+    var dxy = (g[i + s + s * w] - g[i + s - s * w] - g[i - s + s * w] + g[i - s - s * w]) / 4;
+    var tr = dxx + dyy, rt = Math.sqrt((dxx - dyy) * (dxx - dyy) + 4 * dxy * dxy);
+    var l1 = (tr - rt) / 2, l2 = (tr + rt) / 2;
+    if (l1 >= 0) return 99;
+    if (l2 >= 0) return 50;
+    return l1 / l2;
+  }
   function makeCandidate(p, x, y, size, resp) {
     x = Math.round(x); y = Math.round(y);
     var o = offsets(size), c = patchMean(p, x, y, o.disc), rg = patchMean(p, x, y, o.ring);
     var hv = rgb2hsv(c.r, c.g, c.b);
+    var rh = rgb2hsv(rg.r, rg.g, rg.b);
     var cd = Math.sqrt((c.r - rg.r) * (c.r - rg.r) + (c.g - rg.g) * (c.g - rg.g) + (c.b - rg.b) * (c.b - rg.b)) / 441;
     var rad = hv.h * Math.PI / 180;
     var f = [hv.v, hv.s, hv.s * Math.cos(rad), hv.s * Math.sin(rad), (c.l - rg.l) / 255 * 2, c.mx / 255, cd * 3, Math.min(resp || 1, 4) / 4, Math.min(1, sharpAt(p, x, y, size, Math.abs(c.l - rg.l)) * 2.5)];
-    var cand = { x: x, y: y, r: size, cls: 0, conf: 0.5, h: hv.h, s: hv.s, v: hv.v, rv: hv.v, f: f, resp: resp || 1, edited: false };
+    var cand = { x: x, y: y, r: size, cls: 0, conf: 0.5, h: hv.h, s: hv.s, v: hv.v, rv: hv.v, f: f, resp: resp || 1, el: elongAt(p, x, y, size), onHair: rh.h >= 20 && rh.h <= 45 && rh.s >= 0.4 && rh.v >= 0.33, edited: false };
     if (p.vsorted) setRank(p, cand);
     return cand;
   }
@@ -501,6 +519,8 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
     var hueDeg = (Math.atan2(b.f[3], b.f[2]) * 180 / Math.PI + 360) % 360;
     var warm = b.f[1] >= 0.2 && hueDeg >= 10 && hueDeg <= 65;
     if (!warm && (b.f[4] < cg || b.f[6] < cg * 1.25)) { b.cls = -1; b.conf = 0.9; return; }
+    /* Pistil hairs: a stretched spot, or one sitting on bright orange, is a hair and not a head. */
+    if (b.el > 4.5 - prm.pick * 0.03 || b.onHair) { b.cls = -1; b.conf = 0.9; return; }
     if (useModel) { var r = knn(b.f); b.cls = r.c; b.conf = r.conf; return; }
     if (b.h >= 14 && b.h <= 50 && b.s >= prm.amb) b.cls = 2;
     else if (b.rv >= prm.cloud && b.s < 0.3) b.cls = 1;
@@ -638,6 +658,7 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
   function refreshAll() {
     var prm = params();
     photos.forEach(function (p) { if (p.blobs) classifyAll(p, prm); });
+    if (detail) classifyAll(detail.d, prm);
     update();
   }
 
@@ -760,10 +781,12 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
       view.width = p.w; view.height = p.h; marks.width = p.w; marks.height = p.h;
       pane.style.width = p.w + 'px'; pane.style.height = p.h + 'px';
       bctx.drawImage(p.canvas, 0, 0);
-      lastPhoto = p; fitView();
+      lastPhoto = p; detail = null; fitView();
     }
     vctx.clearRect(0, 0, marks.width, marks.height);
-    if (showMarks) {
+    var zoomed = detail && detail.p === p;
+    if (zoomed) drawDetail(); else dcan.hidden = true;
+    if (showMarks && !zoomed) {
       var lw = Math.max(0.5, 2 / zoom.s);
       vctx.lineWidth = lw;
       p.blobs.forEach(function (b) {
@@ -776,7 +799,48 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
       });
     }
     var t = p.demo ? (p.name === 'Sample' ? 'Sample photo' : 'Demo image, not a real bud') : (active + 1) + ' / ' + photos.length;
-    $('tag').textContent = t;
+    $('tag').textContent = zoomed ? t + ' · zoom re-scanned' : t;
+  }
+
+  /* ---------- zoom re-scan: zoomed in, the visible patch is scanned again from the original photo ---------- */
+  var detail = null, detailT, dcan = $('detail');
+  function scanDetailSoon() { clearTimeout(detailT); detailT = setTimeout(scanDetail, 250); }
+  function scanDetail() {
+    var p = photos[active];
+    if (!p || !p.src || zoom.s < zoom.fit * 1.6) { if (detail) { detail = null; update(); } return; }
+    var W = stage.clientWidth, H = stage.clientHeight;
+    var x0 = Math.max(0, -zoom.tx / zoom.s), y0 = Math.max(0, -zoom.ty / zoom.s);
+    var x1 = Math.min(p.w, (W - zoom.tx) / zoom.s), y1 = Math.min(p.h, (H - zoom.ty) / zoom.s);
+    if (x1 - x0 < 8 || y1 - y0 < 8) return;
+    /* Source pixels per scanned pixel, then blow the patch up to 1400 px (at most 4x) so small heads get room. */
+    var k = p.src.width / p.w, sw = (x1 - x0) * k, sh = (y1 - y0) * k;
+    var up = Math.min(4, MAXW / Math.max(sw, sh));
+    var c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(sw * up)); c.height = Math.max(1, Math.round(sh * up));
+    var cx = c.getContext('2d');
+    cx.imageSmoothingQuality = 'high';
+    cx.drawImage(p.src, x0 * k, y0 * k, sw, sh, 0, 0, c.width, c.height);
+    var d = prep(c, p.name, false);
+    analyze(d, params());
+    detail = { p: p, d: d, x0: x0, y0: y0, x1: x1, y1: y1 };
+    update();
+  }
+  function drawDetail() {
+    var d = detail.d, sc = zoom.s * (detail.x1 - detail.x0) / d.w;
+    if (dcan.width !== d.w || dcan.height !== d.h) { dcan.width = d.w; dcan.height = d.h; }
+    dcan.style.left = detail.x0 + 'px'; dcan.style.top = detail.y0 + 'px';
+    dcan.style.width = (detail.x1 - detail.x0) + 'px'; dcan.style.height = (detail.y1 - detail.y0) + 'px';
+    var x = dcan.getContext('2d');
+    x.drawImage(d.canvas, 0, 0);
+    if (showMarks) {
+      x.lineWidth = Math.max(0.5, 2 / sc);
+      d.blobs.forEach(function (b) {
+        if (b.cls < 0) return;
+        x.strokeStyle = COLORS[b.cls];
+        x.beginPath(); x.arc(b.x, b.y, Math.max(b.r * 1.5, 4), 0, Math.PI * 2); x.stroke();
+      });
+    }
+    dcan.hidden = false;
   }
 
   function guideFor(pc) {
@@ -791,11 +855,12 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
 
   function update() {
     showParams();
-    var tot = [0, 0, 0];
-    photos.forEach(function (p) { for (var i = 0; i < 3; i++) tot[i] += (p.counts || [0, 0, 0])[i]; });
+    var tot = [0, 0, 0], inView = detail && detail.p === photos[active];
+    if (inView) tot = detail.d.counts.slice();
+    else photos.forEach(function (p) { for (var i = 0; i < 3; i++) tot[i] += (p.counts || [0, 0, 0])[i]; });
     var all = tot[0] + tot[1] + tot[2];
     var pc = tot.map(function (v) { return all ? Math.round(v * 100 / all) : 0; });
-    $('count').textContent = all + ' trichomes · ' + photos.length + (photos.length === 1 ? ' photo' : ' photos');
+    $('count').textContent = inView ? all + ' trichomes in the zoomed bit · zoom out for the whole pic' : all + ' trichomes · ' + photos.length + (photos.length === 1 ? ' photo' : ' photos');
     $('pClear').textContent = pc[0] + '%';
     $('pCloudy').textContent = pc[1] + '%';
     $('pAmber').textContent = pc[2] + '%';
@@ -803,7 +868,7 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
     $('bCloudy').style.width = (all ? tot[1] * 100 / all : 0) + '%';
     $('bAmber').style.width = (all ? tot[2] * 100 / all : 0) + '%';
     $('guide').innerHTML = guideFor(pc) + '<small>Rule of thumb only. Strain and taste matter more than a number.</small>';
-    window.__summary = 'Trichomes: ' + pc[0] + '% clear, ' + pc[1] + '% cloudy, ' + pc[2] + '% amber (' + all + ' counted across ' + photos.length + ' photo' + (photos.length === 1 ? '' : 's') + ').';
+    window.__summary = 'Trichomes: ' + pc[0] + '% clear, ' + pc[1] + '% cloudy, ' + pc[2] + '% amber (' + all + (inView ? ' counted in a zoomed area' : ' counted across ' + photos.length + ' photo' + (photos.length === 1 ? '' : 's')) + ').';
     renderThumbs();
     draw();
   }
@@ -829,6 +894,7 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
   function rescan() {
     var prm = params();
     photos.forEach(function (p) { analyze(p, prm); });
+    if (detail) scanDetailSoon();
     update();
   }
   var timer;
@@ -873,7 +939,7 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
     zoom.s = zoom.fit; zoom.tx = 0; zoom.ty = 0; clampZoom(); applyZoom();
   }
   function limitScale(s) { return Math.max(zoom.fit, Math.min(zoom.fit * 14, s)); }
-  function redrawSoon() { clearTimeout(redrawT); redrawT = setTimeout(draw, 100); }
+  function redrawSoon() { clearTimeout(redrawT); redrawT = setTimeout(draw, 100); scanDetailSoon(); }
   function zoomAt(cx, cy, ns) {
     ns = limitScale(ns);
     var k = ns / zoom.s;
@@ -1142,34 +1208,51 @@ h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
   }
 
   /* ---------- sharing answers ---------- */
-  var SUBMIT_URL = '';  /* paste your form endpoint here, e.g. https://formspree.io/f/xxxxxxxx */
+  /* Answers go to a Google Form whose responses land in a Sheet that Claude reads to retrain the model.
+     FORM_ID is the long id in the form's /d/e/<id>/viewform link; FORM_ENTRY is the paragraph question's entry.NNN name. */
+  var FORM_ID = '';
+  var FORM_ENTRY = '';
+  var CHUNK = 150;
+  /* A random tag per browser, so repeat submissions from one person can be merged. Not a name, not tied to anything. */
+  function anonId() {
+    var id = '';
+    try { id = localStorage.getItem('trichome-anon-id') || ''; } catch (e) {}
+    if (!id) {
+      id = Math.random().toString(36).slice(2, 10);
+      try { localStorage.setItem('trichome-anon-id', id); } catch (e) {}
+    }
+    return id;
+  }
   function ownAnswers() {
     return lessons.filter(function (l) { return !l.s; }).slice(-600).map(function (l) {
       return [l.c].concat(l.f.map(function (x) { return Math.round(x * 1000) / 1000; }));
     });
   }
   function shareStatus(t) { var el = $('shareStatus'); if (el) el.textContent = t; }
-  $('qCopy').addEventListener('click', function () {
-    var rows = ownAnswers(), text = 'TRICHOME-QUIZ ' + JSON.stringify(rows);
+  function copyFallback(rows) {
+    var text = 'TRICHOME-QUIZ ' + JSON.stringify(rows);
     var box = $('qBox'); box.hidden = false; box.value = text; box.select();
     $('qCopyNote').hidden = false;
-    $('qCopyNote').textContent = rows.length + ' answers ready. Paste them into the forum thread. It is only numbers and your answers.';
-    try { navigator.clipboard.writeText(text).then(function () { $('qCopyNote').textContent = rows.length + ' answers copied. Paste them into the forum thread.'; }, function () {}); } catch (e) {}
-  });
-  if (!SUBMIT_URL) $('qSend').hidden = true;
+    $('qCopyNote').textContent = rows.length + ' answers ready. Paste them in the thread, it is just numbers and your calls.';
+    try { navigator.clipboard.writeText(text).then(function () { $('qCopyNote').textContent = rows.length + ' answers copied. Paste them in the thread.'; }, function () {}); } catch (e) {}
+  }
   $('qSend').addEventListener('click', function () {
     var rows = ownAnswers();
-    if (!rows.length) { shareStatus('Answer a few spots first, then send.'); return; }
+    if (!rows.length) { shareStatus('Answer a few spots first, then hit it.'); return; }
+    if (!FORM_ID || !FORM_ENTRY) { copyFallback(rows); return; }
+    var id = anonId(), parts = Math.ceil(rows.length / CHUNK), sends = [];
+    for (var i = 0; i < parts; i++) {
+      var body = new URLSearchParams();
+      body.append(FORM_ENTRY, 'TRICHOME-QUIZ v1 ' + id + ' ' + (i + 1) + '/' + parts + ' ' + JSON.stringify(rows.slice(i * CHUNK, (i + 1) * CHUNK)));
+      sends.push(fetch('https://docs.google.com/forms/d/e/' + FORM_ID + '/formResponse', { method: 'POST', mode: 'no-cors', body: body }));
+    }
     $('qSend').disabled = true;
-    fetch(SUBMIT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ count: rows.length, answers: JSON.stringify(rows) })
-    }).then(function (r) {
-      if (!r.ok) throw new Error('status ' + r.status);
-      shareStatus('Sent. Thanks, ' + rows.length + ' answers received.');
+    shareStatus('Sending...');
+    Promise.all(sends).then(function () {
+      shareStatus('Dank submitted. ' + rows.length + ' answers in, thanks for the help.');
     }).catch(function () {
-      shareStatus('Could not send. Tap Copy my answers and paste them in the forum thread instead.');
+      shareStatus('Could not reach the server. Here they are to paste in the thread instead.');
+      copyFallback(rows);
     }).then(function () { $('qSend').disabled = false; });
   });
 
